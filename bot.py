@@ -2,7 +2,7 @@ import subprocess, sys, os
 try:
     import telegram
 except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "python-telegram-bot", "httpx"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "python-telegram-bot", "httpx", "python-dotenv"])
     import telegram
 
 import sqlite3, warnings, random, string
@@ -10,6 +10,13 @@ warnings.filterwarnings("ignore")
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+
+# Load.env file from Raven Host Environment tab
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except:
+    pass
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -104,7 +111,6 @@ async def check_join_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try: await update.callback_query.message.delete()
         except: pass
         await update.callback_query.message.reply_text("✅ Verified! Welcome back.", reply_markup=main_menu())
-        # trigger start again
         user = update.effective_user
         ensure_user(user)
         await update.callback_query.message.reply_text("🔥 *LIKEBOT OFFICIAL* - Use menu below 👇", reply_markup=main_menu(), parse_mode="Markdown")
@@ -205,7 +211,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-# --- Conversation ---
 async def select_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     pkg_id = update.callback_query.data.replace("pkg_","")
@@ -257,7 +262,6 @@ async def get_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.commit()
     oid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    # Reward referrer 20%
     referrer = db.execute("SELECT referrer_id FROM users WHERE user_id=?", (user.id,)).fetchone()
     if referrer and referrer[0]:
         bonus = int(context.user_data["price"] * 0.2)
