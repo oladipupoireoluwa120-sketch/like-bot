@@ -1,17 +1,29 @@
+import os
+import threading
 from flask import Flask
-import threading, os
-import bot
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-flask_app = Flask(__name__)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+PORT = int(os.environ.get("PORT", 10000))
 
-@flask_app.route('/')
+app = Flask(__name__)
+
+@app.route('/')
 def home():
-    return "LikeBot LIVE!"
+    return "LikeBot is alive! 🔥"
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔥 LikeBot is LIVE! Send /start to use LikeBooster.")
 
 def run_bot():
-    bot.main()
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    print("🔥 LikeBot starting...")
+    application.run_polling()
 
 if __name__ == "__main__":
+    # Start bot in background thread
     threading.Thread(target=run_bot, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host='0.0.0.0', port=port)
+    # Start web server for Render
+    app.run(host="0.0.0.0", port=PORT)
