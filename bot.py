@@ -1,4 +1,12 @@
-import sqlite3, warnings, re, os, random, string
+import subprocess, sys, os
+# --- AUTO-INSTALL FIX FOR RAVEN HOST ---
+try:
+    import telegram
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "python-telegram-bot", "httpx"])
+    import telegram
+
+import sqlite3, warnings, re, random, string
 warnings.filterwarnings("ignore")
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -7,7 +15,7 @@ from telegram.request import HTTPXRequest
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("Set BOT_TOKEN env var!")
+    raise ValueError("Set BOT_TOKEN env var in Raven Host -> Variables!")
 
 ADMIN_ID = 8805633124
 ACCOUNT_NUMBER = "6143597127"
@@ -73,10 +81,9 @@ async def check_join_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     joined_both, _, _ = await check_joined(update.effective_user.id, context.bot)
     if joined_both:
-        await update.callback_query.message.delete()
-        # fake update to call start
-        update.message = update.callback_query.message
-        await start(update, context)
+        try: await update.callback_query.message.delete()
+        except: pass
+        await update.message.reply_text("✅ Verified! Welcome.", reply_markup=main_menu())
     else:
         await update.callback_query.answer("❌ Join both channels first!", show_alert=True)
 
@@ -121,7 +128,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(msg, reply_markup=main_menu())
         return
 
-# Conversation handlers
 async def select_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     pkg_id = update.callback_query.data.replace("pkg_","")
