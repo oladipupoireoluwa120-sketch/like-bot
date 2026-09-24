@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from telegram.request import HTTPXRequest
 from telegram.constants import ChatMemberStatus
 
-BOT_TOKEN = "8767564803:AAGeeWoT-1TeRZsSOTTeg420JxYW2FvHOdc"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = 8805633124
 SUPPORT_USERNAME = "MARCUSSUPPORT"
 ACCOUNT_NUMBER = "6143597127"
