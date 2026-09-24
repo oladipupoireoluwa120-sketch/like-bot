@@ -35,13 +35,22 @@ db.execute("""CREATE TABLE IF NOT EXISTS carts(user_id INTEGER PRIMARY KEY, pkg 
 db.commit()
 
 def gen_txn(): return f"LB-{''.join(random.choices(string.digits, k=5))}{random.choice(string.ascii_uppercase)}"
-def main_menu(): return ReplyKeyboardMarkup([["🚀 BOOST LIKES", "💰 PACKAGES"],["👥 REFER & EARN 20%", "💳 MY BALANCE - REFER & EARN"],["📋 MY ORDERS", "🏆 TOP REFERRERS"],["ℹ️ HOW IT WORKS", "💬 SUPPORT"]], resize_keyboard=True, is_persistent=True)
+
+def main_menu():
+    return ReplyKeyboardMarkup([
+        ["🚀 BOOST LIKES", "💰 PACKAGES"],
+        ["👥 REFER & EARN 20%", "💳 MY BALANCE - REFER & EARN"],
+        ["📋 MY ORDERS", "🏆 TOP REFERRERS"],
+        ["ℹ️ HOW IT WORKS", "💬 SUPPORT"]
+    ], resize_keyboard=True, is_persistent=True)
+
 async def check_joined(user_id, bot):
     try: m1 = await bot.get_chat_member(FORCE_CHANNEL_ID, user_id); ok1 = m1.status in ['member','administrator','creator']
     except: ok1 = False
     try: m2 = await bot.get_chat_member(PROOF_CHANNEL_ID, user_id); ok2 = m2.status in ['member','administrator','creator']
     except: ok2 = False
     return (ok1 and ok2), ok1, ok2
+
 def ensure_user(u):
     if not db.execute("SELECT user_id FROM users WHERE user_id=?", (u.id,)).fetchone():
         db.execute("INSERT INTO users(user_id, username, joined) VALUES(?,?,?)", (u.id, u.username, datetime.now().strftime("%d-%m-%Y"))); db.commit()
@@ -49,73 +58,209 @@ def ensure_user(u):
     return banned and banned[0]==1
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    joined_both, ok1, ok2 = await check_joined(update.effective_user.id, context.bot)
+    user = update.effective_user
+    joined_both, ok1, ok2 = await check_joined(user.id, context.bot)
     if not joined_both:
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"{'✅' if ok1 else '❌'} JOIN OFFICIAL", url="https://t.me/likebotofficial")],[InlineKeyboardButton(f"{'✅' if ok2 else '❌'} JOIN BACKUP", url="https://t.me/likebotbackup")],[InlineKeyboardButton("✅ I Joined - Verify", callback_data="check_join")]])
-        await update.message.reply_text("⚠️ JOIN BOTH CHANNELS!", reply_markup=kb); return
-    if ensure_user(update.effective_user): await update.message.reply_text("🚫 Banned"); return
-    await update.message.reply_text("🔥 LIKEBOT LIVE ✅", reply_markup=main_menu())
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{'✅' if ok1 else '❌'} JOIN OFFICIAL", url="https://t.me/likebotofficial")],
+            [InlineKeyboardButton(f"{'✅' if ok2 else '❌'} JOIN BACKUP", url="https://t.me/likebotbackup")],
+            [InlineKeyboardButton("✅ I Joined - Verify", callback_data="check_join")]
+        ])
+        await update.message.reply_text("⚠️ JOIN BOTH CHANNELS TO USE BOT! 🔒", reply_markup=kb)
+        return
+
+    if ensure_user(user):
+        await update.message.reply_text("🚫 Banned. DM @MARCUSSUPPORT")
+        return
+
+    # Referral logic
+    if context.args and context.args[0].startswith("REF"):
+        try:
+            rid = int(context.args[0].replace("REF",""))
+            if rid!= user.id and not db.execute("SELECT * FROM referrals WHERE referred_id=?", (user.id,)).fetchone():
+                cur = db.execute("SELECT referrer_id FROM users WHERE user_id=?", (user.id,)).fetchone()
+                if cur and cur[0] is None:
+                    db.execute("INSERT INTO referrals(referrer_id, referred_id, date) VALUES(?,?,?)", (rid, user.id, datetime.now().strftime("%d-%m")))
+                    db.execute("UPDATE users SET referrals_count=referrals_count+1 WHERE user_id=?", (rid,))
+                    db.execute("UPDATE users SET referrer_id=? WHERE user_id=?", (rid, user.id))
+                    db.commit()
+        except: pass
+
+    await update.message.reply_text("🔥 *LIKEBOT OFFICIAL LIVE* ✅\n✅ 150+ Delivered\n🛡️ Money-back\n👇 Tap Menu Below", reply_markup=main_menu())
 
 async def check_join_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     joined_both, _, _ = await check_joined(update.effective_user.id, context.bot)
-    if joined_both: await start(update, context)
+    if joined_both:
+        await update.callback_query.message.delete()
+        await start(update, context)
+    else:
+        await update.callback_query.answer("❌ Join both channels first!", show_alert=True)
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    joined_both, _, _ = await check_joined(update.effective_user.id, context.bot)
-    if not joined_both: await update.callback_query.answer("Join both!", show_alert=True); return
+    user_id = update.effective_user.id
     txt = update.message.text
+
+    joined_both, _, _ = await check_joined(user_id, context.bot)
+    if not joined_both:
+        await update.message.reply_text("⚠️ Join both channels first! Send /start")
+        return
+
     if txt in ["🚀 BOOST LIKES", "💰 PACKAGES"]:
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔥 1000 - ₦100", callback_data="pkg_1000")],[InlineKeyboardButton("⭐ 3000 - ₦250 BEST", callback_data="pkg_3000")],[InlineKeyboardButton("💎 5000 - ₦400", callback_data="pkg_5000")],[InlineKeyboardButton("👑 10000 - ₦700", callback_data="pkg_10000")]])
-        await update.message.reply_text("💰 SELECT PACKAGE", reply_markup=kb)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔥 1000 Likes - ₦100", callback_data="pkg_1000")],
+            [InlineKeyboardButton("⭐ 3000 Likes - ₦250 BEST", callback_data="pkg_3000")],
+            [InlineKeyboardButton("💎 5000 Likes - ₦400", callback_data="pkg_5000")],
+            [InlineKeyboardButton("👑 10000 Likes - ₦700 MEGA", callback_data="pkg_10000")]
+        ])
+        await update.message.reply_text("💰 *SELECT PACKAGE* 👇", reply_markup=kb)
+        return
+
+    if txt == "👥 REFER & EARN 20%":
+        row = db.execute("SELECT referrals_count, balance, total_earned FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if row:
+            c, b, e = row
+            botname = (await context.bot.get_me()).username
+            link = f"https://t.me/{botname}?start=REF{user_id}"
+            await update.message.reply_text(f"👥 *REFER & EARN 20%* 💸\n\nYour Link:\n`{link}`\n\nRefs: {c}\nBalance: ₦{b}\nEarned: ₦{e}\n\nShare link, get 20% per sale!", reply_markup=main_menu())
+        return
+
+    if txt == "💳 MY BALANCE - REFER & EARN":
+        row = db.execute("SELECT balance, referrals_count, total_earned FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if row:
+            bal, count, earn = row
+            await update.message.reply_text(f"💳 *MY BALANCE* 💰\n\nBalance: *₦{bal}*\nRefs: {count}\nTotal Earned: ₦{earn}", reply_markup=main_menu())
+        return
+
+    if txt == "📋 MY ORDERS":
+        rows = db.execute("SELECT id, txn_id, likes, status, date FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (user_id,)).fetchall()
+        if not rows:
+            await update.message.reply_text("📋 No orders yet!", reply_markup=main_menu())
+        else:
+            msg = "📋 *YOUR ORDERS*\n\n"
+            for oid, txn, likes, st, date in rows:
+                ic = "✅" if st=="DELIVERED" else "⏳"
+                msg += f"{ic} #{oid} | {txn} | {likes} Likes | {st}\n"
+            await update.message.reply_text(msg, reply_markup=main_menu())
+        return
+
+    if txt == "🏆 TOP REFERRERS":
+        rows = db.execute("SELECT username, referrals_count FROM users ORDER BY referrals_count DESC LIMIT 5").fetchall()
+        msg = "🏆 *TOP REFERRERS*\n\n"
+        for i, (uname, cnt) in enumerate(rows, 1):
+            msg += f"{i}. @{uname or 'user'} - {cnt} refs\n"
+        await update.message.reply_text(msg, reply_markup=main_menu())
+        return
+
+    if txt in ["ℹ️ HOW IT WORKS", "💬 SUPPORT"]:
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 DM @MARCUSSUPPORT", url="https://t.me/MARCUSSUPPORT")]])
+        await update.message.reply_text(f"ℹ️ *HOW IT WORKS*\n1. Choose package\n2. Pay to OPay {ACCOUNT_NUMBER}\n3. Upload receipt\n\n💬 Support: @MARCUSSUPPORT", reply_markup=kb)
+        return
 
 async def select_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     pkg_id = update.callback_query.data.replace("pkg_","")
-    pkg = PACKAGES[pkg_id]; context.user_data["pkg"]=pkg_id; context.user_data["likes"]=pkg["likes"]; context.user_data["price"]=pkg["price"]
-    context.user_data["txn"]=gen_txn()
-    await update.callback_query.message.reply_text(f"✅ {pkg['likes']} Likes selected\nSend UID (11 digits):")
+    pkg = PACKAGES[pkg_id]
+    context.user_data["pkg"] = pkg_id
+    context.user_data["likes"] = pkg["likes"]
+    context.user_data["price"] = pkg["price"]
+    context.user_data["txn"] = gen_txn()
+    await update.callback_query.message.reply_text(f"✅ *{pkg['likes']} Likes - ₦{pkg['price']}* Selected!\n🆔 TXN: `{context.user_data['txn']}`\n\n🎮 Step 1/4: Send Free Fire UID (11 digits)")
     return UID
 
 async def get_uid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.text.isdigit() or len(update.message.text)!=11: await update.message.reply_text("❌ 11 digits!"); return UID
-    context.user_data["uid"]=update.message.text; await update.message.reply_text("👤 Send FF Name:"); return NAME
-async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["name"]=update.message.text; await update.message.reply_text("📧 Send Email:"); return EMAIL
-async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "@" not in update.message.text: await update.message.reply_text("❌ Invalid email"); return EMAIL
-    context.user_data["email"]=update.message.text
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🏦 OPay - ₦{context.user_data['price']}", callback_data="pay_opay")]])
-    await update.message.reply_text(f"Pay ₦{context.user_data['price']} to {ACCOUNT_NUMBER}", reply_markup=kb); return PAYMENT_CHOICE
-async def payment_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer(); await update.callback_query.message.reply_text(f"Type {context.user_data['price']} after paying:"); return AMOUNT
-async def get_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(context.user_data["price"]) not in update.message.text: await update.message.reply_text(f"Type {context.user_data['price']} EXACT"); return AMOUNT
-    await update.message.reply_text("📸 Upload receipt:"); return RECEIPT
-async def get_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txn=context.user_data["txn"]; db.execute("INSERT INTO orders(txn_id, user_id, username, ff_uid, ff_name, email, package, likes, amount, pay_method, status, date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",(txn, update.effective_user.id, update.effective_user.username, context.user_data["uid"], context.user_data["name"], context.user_data["email"], context.user_data["pkg"], context.user_data["likes"], context.user_data["price"], "OPAY", "PENDING", datetime.now().strftime("%d-%m")) ); db.commit()
-    await update.message.reply_text(f"📦 Order {txn} received! Pending approval", reply_markup=main_menu())
-    return ConversationHandler.END
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text("Cancelled", reply_markup=main_menu()); return ConversationHandler.END
+    uid_text = update.message.text.strip()
+    if not uid_text.isdigit() or len(uid_text)!= 11:
+        await update.message.reply_text("❌ Invalid! Must be exactly 11 digits")
+        return UID
+    context.user_data["uid"] = uid_text
+    await update.message.reply_text(f"✅ UID {uid_text} verified\n\n👤 Step 2/4: FF ID Name")
+    return NAME
 
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["name"] = update.message.text.strip()
+    await update.message.reply_text("✅ Name saved\n\n📧 Step 3/4: Email")
+    return EMAIL
+
+async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "@" not in update.message.text:
+        await update.message.reply_text("❌ Invalid email")
+        return EMAIL
+    context.user_data["email"] = update.message.text.strip()
+    price = context.user_data["price"]
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🏦 OPay {ACCOUNT_NUMBER} - ₦{price}", callback_data="pay_opay")]])
+    await update.message.reply_text(f"✅ Confirmed! TXN: `{context.user_data['txn']}`\n\n👇 Choose Payment:", reply_markup=kb)
+    return PAYMENT_CHOICE
+
+async def payment_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text(f"💳 *OPay Payment*\nAcc: `{ACCOUNT_NUMBER}`\nName: {ACCOUNT_NAME}\nAmount: *₦{context.user_data['price']} EXACT*\n\nType *{context.user_data['price']}* after paying")
+    return AMOUNT
+
+async def get_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    price = context.user_data["price"]
+    if str(price) not in update.message.text:
+        await update.message.reply_text(f"❌ Type {price} EXACT!")
+        return AMOUNT
+    await update.message.reply_text("✅ Confirmed!\n\n📸 Upload OPay receipt")
+    return RECEIPT
+
+async def get_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txn = context.user_data["txn"]
+    user = update.effective_user
+    db.execute("INSERT INTO orders(txn_id, user_id, username, ff_uid, ff_name, email, package, likes, amount, pay_method, status, date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+               (txn, user.id, user.username, context.user_data["uid"], context.user_data["name"], context.user_data["email"], context.user_data["pkg"], context.user_data["likes"], context.user_data["price"], "OPAY", "PENDING", datetime.now().strftime("%d-%m %H:%M")))
+    db.commit()
+    oid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # Affiliate commission
+    row = db.execute("SELECT referrer_id FROM users WHERE user_id=?", (user.id,)).fetchone()
+    if row and row[0]:
+        ref_id = row[0]
+        commission = int(context.user_data["price"] * 0.20)
+        db.execute("UPDATE users SET balance=balance+?, total_earned=total_earned+? WHERE user_id=?", (commission, commission, ref_id))
+        db.commit()
+        try: await context.bot.send_message(ref_id, f"💰 Affiliate! You got ₦{commission}!")
+        except: pass
+
+    await update.message.reply_text(f"📦 *Order #{oid} | {txn}* ⏳ Received! Pending admin approval", reply_markup=main_menu())
+
+    # Send to admin
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Approve", callback_data=f"ap_{user.id}_{oid}"), InlineKeyboardButton("❌ Reject", callback_data=f"rj_{user.id}_{oid}")]])
+    try:
+        await context.bot.send_photo(ADMIN_ID, update.message.photo[-1].file_id, caption=f"🔔 ORDER #{oid} | {txn}\n@{user.username} {user.id}\nUID:{context.user_data['uid']}\n📦 {context.user_data['likes']} Likes ₦{context.user_data['price']}", reply_markup=kb)
+    except: pass
+
+    return ConversationHandler.END
+
+async def admin_act(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    act, uid, oid = update.callback_query.data.split("_")
+    row = db.execute("SELECT likes, txn_id FROM orders WHERE id=?", (oid,)).fetchone()
+    if not row: return
+    likes, txn = row
+    if act == "ap":
+        db.execute("UPDATE orders SET status='DELIVERED' WHERE id=?", (oid,))
+        db.commit()
+        try: await context.bot.send_message(int(uid), f"✅ Order #{oid} | {txn} DELIVERED! 🎉 {likes} Likes Added!")
+        except: pass
+    else:
+        db.execute("UPDATE orders SET status='REJECTED' WHERE id=?", (oid,))
+        db.commit()
+        try: await context.bot.send_message(int(uid), f"❌ Order #{oid} | {txn} Rejected")
+        except: pass
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Cancelled", reply_markup=main_menu())
+    return ConversationHandler.END
+
+# FLASK FOR RENDER
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return "Alive"
-def run_flask(): flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+def home(): return "LikeBot Alive 🔥"
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
 
 def build_application():
-    req = HTTPXRequest(connect_timeout=30, read_timeout=30)
-    app = Application.builder().token(BOT_TOKEN).request(req).build()
-    conv = ConversationHandler(entry_points=[CallbackQueryHandler(select_package, pattern="^pkg_")], states={UID:[MessageHandler(filters.TEXT & ~filters.COMMAND, get_uid)], NAME:[MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)], EMAIL:[MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)], PAYMENT_CHOICE:[CallbackQueryHandler(payment_choice, pattern="^pay_")], AMOUNT:[MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)], RECEIPT:[MessageHandler(filters.PHOTO, get_receipt)]}, fallbacks=[CommandHandler("cancel", cancel)])
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(check_join_cb, pattern="check_join"))
-    app.add_handler(MessageHandler(filters.Regex("^(🚀 BOOST LIKES|💰 PACKAGES)"), menu_handler))
-    app.add_handler(conv)
-    return app
-
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    build_application().run_polling()
-
-if __name__ == "__main__":
-    main()
+    req = HTTPXRequest
