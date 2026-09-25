@@ -121,13 +121,20 @@ async def get_receipt(update:Update,context:ContextTypes.DEFAULT_TYPE):
  except: pass
  return ConversationHandler.END
 async def admin_act(update:Update,context:ContextTypes.DEFAULT_TYPE):
- await update.callback_query.answer();act,uid,oid=update.callback_query.data.split("_");row=db.execute("SELECT likes,txn_id FROM orders WHERE id=?",(oid,)).fetchone()
+ await update.callback_query.answer()
+ d=update.callback_query.data
+ act,uid,oid=d.split("_")
+ row=db.execute("SELECT likes,txn_id FROM orders WHERE id=?",(oid,)).fetchone()
  if not row: return
  likes,txn=row
- if act=="ap": db.execute("UPDATE orders SET status='DELIVERED' WHERE id=?",(oid,));db.commit()
-  try: await context.bot.send_message(int(uid),f"✅ Order #{oid}|{txn} DELIVERED! 🎉 {likes} Likes Added!")
+ if act=="ap":
+  db.execute("UPDATE orders SET status='DELIVERED' WHERE id=?",(oid,))
+  db.commit()
+  try: await context.bot.send_message(int(uid),f"✅ Order #{oid}|{txn} DELIVERED! {likes} Likes Added!")
   except: pass
- else: db.execute("UPDATE orders SET status='REJECTED' WHERE id=?",(oid,));db.commit()
+ else:
+  db.execute("UPDATE orders SET status='REJECTED' WHERE id=?",(oid,))
+  db.commit()
   try: await context.bot.send_message(int(uid),f"❌ Order #{oid}|{txn} Rejected")
   except: pass
 async def withdraw_cb(update:Update,context:ContextTypes.DEFAULT_TYPE):
@@ -160,7 +167,8 @@ async def admin_callbacks(update:Update,context:ContextTypes.DEFAULT_TYPE):
   await update.callback_query.message.reply_text(msg,parse_mode="Markdown")
 async def pay_user(update:Update,context:ContextTypes.DEFAULT_TYPE):
  if update.effective_user.id!=ADMIN_ID: return
- try: uid=int(update.message.text.split("_")[1].split()[0].replace("/pay_",""));bal=db.execute("SELECT balance FROM users WHERE user_id=?",(uid,)).fetchone()
+ try:
+  uid=int(update.message.text.split("_")[1].split()[0].replace("/pay_",""));bal=db.execute("SELECT balance FROM users WHERE user_id=?",(uid,)).fetchone()
   if not bal or bal[0]==0: await update.message.reply_text("No user/0 bal");return
   db.execute("UPDATE users SET balance=0 WHERE user_id=?",(uid,));db.commit();await update.message.reply_text(f"✅ Paid ₦{bal[0]} to {uid}. Reset 0")
   try: await context.bot.send_message(uid,f"✅ Withdrawal ₦{bal[0]} PAID! Check OPay.")
